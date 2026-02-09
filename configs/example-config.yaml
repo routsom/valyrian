@@ -1,0 +1,139 @@
+# Valyrian Edge Example Configuration
+# Copy this file and customize for your target
+
+# =============================================================================
+# TARGET CONFIGURATION
+# =============================================================================
+target:
+  # Unique identifier for this target
+  id: "example-chatbot"
+  
+  # Human-readable name
+  name: "Example Customer Support Bot"
+  
+  # Base URL of the target chatbot
+  baseUrl: "https://example.com"
+  
+  # Known architecture (optional): rag, fine-tuned, prompt-engineered, agentic
+  architecture: "rag"
+  
+  # Known LLM provider (optional): openai, anthropic, google, meta
+  llmProvider: "openai"
+  
+  # API endpoints
+  endpoints:
+    # Main chat endpoint (required)
+    chat: "/api/chat"
+    
+    # Login endpoint (optional)
+    login: "/api/auth/login"
+    
+    # Conversation history (optional)
+    history: "/api/conversations"
+    
+    # Document upload for RAG systems (optional)
+    upload: "/api/documents/upload"
+    
+    # WebSocket for real-time chat (optional)
+    # websocket: "wss://example.com/ws/chat"
+  
+  # Authentication configuration (optional)
+  authentication:
+    method: "bearer_token"  # none, api_key, bearer_token, session_cookie, oauth2
+    credentials:
+      token: "${AUTH_TOKEN}"  # Use environment variable
+    headers:
+      X-Custom-Header: "value"
+  
+  # Known capabilities (helps optimize testing)
+  capabilities:
+    - "web_search"
+    - "knowledge_base_query"
+    - "ticket_creation"
+  
+  # Rate limit (requests per minute)
+  rateLimit: 30
+  
+  # Request timeout in seconds
+  timeout: 30
+
+# =============================================================================
+# LLM CONFIGURATION (optional, defaults to environment variables)
+# =============================================================================
+llm:
+  # Provider: anthropic, openai, ollama
+  provider: "anthropic"
+  
+  # Model to use for adversarial agent
+  model: "claude-sonnet-4-20250514"
+  
+  # Temperature (0.0 - 1.0)
+  temperature: 0.7
+  
+  # Max tokens per response
+  maxTokens: 4096
+  
+  # API key (use environment variable for security)
+  apiKey: "${ANTHROPIC_API_KEY}"
+  
+  # For Ollama only
+  # ollamaBaseUrl: "http://localhost:11434"
+
+# =============================================================================
+# SCAN SCOPE
+# =============================================================================
+scope:
+  # Vulnerability categories to test
+  vulnerabilities:
+    - "prompt_injection"
+    - "rag_poisoning"
+    - "tool_abuse"
+    - "auth_bypass"
+    - "data_exfiltration"
+    # - "excessive_agency"
+    # - "insecure_output"
+    # - "denial_of_service"
+  
+  # Maximum turns for multi-turn attacks
+  maxTurns: 10
+  
+  # Whether to attempt exploitation after detection
+  enableExploitation: true
+  
+  # Whether to generate PoC scripts
+  generatePoC: true
+
+# =============================================================================
+# RATE LIMITING
+# =============================================================================
+rateLimit:
+  # Requests per minute
+  requestsPerMinute: 30
+  
+  # Delay between requests in milliseconds
+  delayBetweenRequests: 2000
+
+# =============================================================================
+# OUTPUT CONFIGURATION
+# =============================================================================
+output:
+  # Directory for reports and logs
+  directory: "./audit-logs"
+  
+  # Report formats to generate
+  formats:
+    - "markdown"
+    - "json"
+    # - "html"
+    # - "pdf"
+    # - "sarif"
+  
+  # Redact sensitive data (credentials, PII) in reports
+  redactSensitiveData: true
+
+# =============================================================================
+# GENERAL OPTIONS
+# =============================================================================
+
+# Enable verbose logging
+verbose: false

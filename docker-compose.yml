@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (for Temporal)
+  postgresql:
+    image: postgres:15-alpine
+    container_name: valyrian-postgres
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal_secure_password
+      POSTGRES_DB: temporal
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - valyrian-network
+
+  # Temporal Server
+  temporal:
+    image: temporalio/auto-setup:1.24
+    container_name: valyrian-temporal
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal_secure_password
+      - POSTGRES_SEEDS=postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=/etc/temporal/config/development-sql.yaml
+    volumes:
+      - ./temporal-config:/etc/temporal/config
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD", "temporal", "workflow", "list", "--namespace", "default"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - valyrian-network
+
+  # Temporal UI
+  temporal-ui:
+    image: temporalio/ui:2.26
+    container_name: valyrian-temporal-ui
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    ports:
+      - "8080:8080"
+    networks:
+      - valyrian-network
+
+  # Valyrian Edge Worker
+  valyrian-worker:
+    build: .
+    container_name: valyrian-worker
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=valyrian-edge
+      - TEMPORAL_TASK_QUEUE=valyrian-pentest-queue
+      - VALYRIAN_LLM_PROVIDER=${VALYRIAN_LLM_PROVIDER:-anthropic}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./audit-logs:/app/audit-logs
+      - ./configs:/app/configs:ro
+    entrypoint: ["node", "dist/orchestrator/worker.js"]
+    networks:
+      - valyrian-network
+
+  # Ollama (optional local LLM)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: valyrian-ollama
+    profiles:
+      - local-llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - valyrian-network
+
+volumes:
+  postgres-data:
+  ollama-data:
+
+networks:
+  valyrian-network:
+    driver: bridge
