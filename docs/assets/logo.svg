@@ -1,20 +1,111 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    <linearGradient id="shieldFill" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#1565C0"/>
+      <stop offset="100%" style="stop-color:#0D47A1"/>
     </linearGradient>
+    <linearGradient id="swordBlade" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#E0E8F0"/>
+      <stop offset="30%" style="stop-color:#B0BEC5"/>
+      <stop offset="50%" style="stop-color:#CFD8DC"/>
+      <stop offset="70%" style="stop-color:#90A4AE"/>
+      <stop offset="100%" style="stop-color:#B0BEC5"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00E5FF"/>
+      <stop offset="100%" style="stop-color:#00B0FF"/>
+    </linearGradient>
+    <linearGradient id="darkAccent" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#0D47A1"/>
+      <stop offset="100%" style="stop-color:#091B3A"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
-  
-  <!-- Shield shape -->
-  <path d="M100 10 L180 50 L180 100 C180 150 140 180 100 190 C60 180 20 150 20 100 L20 50 Z" 
-        fill="url(#grad)" stroke="#1E1B4B" stroke-width="3"/>
-  
-  <!-- Sword -->
-  <path d="M100 40 L100 140" stroke="#E0E7FF" stroke-width="8" stroke-linecap="round"/>
-  <path d="M80 70 L120 70" stroke="#E0E7FF" stroke-width="6" stroke-linecap="round"/>
-  <polygon points="100,35 92,50 108,50" fill="#E0E7FF"/>
-  
-  <!-- Edge glow effect -->
-  <circle cx="100" cy="60" r="15" fill="none" stroke="#A5B4FC" stroke-width="2" opacity="0.5"/>
+
+  <!-- === HEXAGONAL SHIELD === -->
+  <!-- Outer hex - the shield shape (K8s-style hexagon) -->
+  <path d="M256 38 L430 138 L430 338 L256 438 L82 338 L82 138 Z"
+        fill="url(#shieldFill)" stroke="#1E88E5" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- Inner hex border -->
+  <path d="M256 62 L412 152 L412 324 L256 414 L100 324 L100 152 Z"
+        fill="none" stroke="#42A5F5" stroke-width="1.5" opacity="0.3"/>
+
+  <!-- Hex face - darker inner -->
+  <path d="M256 78 L398 162 L398 312 L256 396 L114 312 L114 162 Z"
+        fill="url(#darkAccent)" opacity="0.5"/>
+
+  <!-- === VALYRIAN STEEL SWORD === -->
+  <!-- Blade - centered, pointing up, clean geometric shape -->
+  <path d="M256 72 L272 96 L275 275 L256 290 L237 275 L240 96 Z"
+        fill="url(#swordBlade)" stroke="#CFD8DC" stroke-width="0.5"/>
+
+  <!-- Damascus ripple lines on blade -->
+  <g stroke="#78909C" stroke-width="0.8" opacity="0.4">
+    <path d="M242 120 Q256 115, 273 120" fill="none"/>
+    <path d="M241 145 Q256 140, 274 145" fill="none"/>
+    <path d="M240 170 Q256 164, 275 170" fill="none"/>
+    <path d="M240 195 Q256 189, 275 195" fill="none"/>
+    <path d="M239 220 Q256 214, 275 220" fill="none"/>
+    <path d="M239 245 Q256 239, 274 245" fill="none"/>
+  </g>
+
+  <!-- Blade center fuller -->
+  <path d="M256 90 L260 100 L261 265 L256 278 L251 265 L252 100 Z"
+        fill="#546E7A" opacity="0.3"/>
+
+  <!-- Blade edge gleam -->
+  <line x1="256" y1="72" x2="240" y2="96" stroke="#FFFFFF" stroke-width="1" opacity="0.6"/>
+
+  <!-- === CROSSGUARD === -->
+  <path d="M192 280 L320 280 L316 296 L196 296 Z"
+        fill="url(#accent)" stroke="#00B0FF" stroke-width="0.5"/>
+
+  <!-- Guard curved ends -->
+  <path d="M192 280 Q178 282, 175 276 Q173 270, 180 268 L188 274 Z"
+        fill="url(#accent)"/>
+  <path d="M320 280 Q334 282, 337 276 Q339 270, 332 268 L324 274 Z"
+        fill="url(#accent)"/>
+
+  <!-- Guard center gem -->
+  <circle cx="256" cy="288" r="5" fill="#FFFFFF" opacity="0.8" filter="url(#glow)"/>
+
+  <!-- === GRIP === -->
+  <rect x="247" y="296" width="18" height="60" rx="2" fill="#0D47A1"/>
+
+  <!-- Grip wrap pattern -->
+  <g stroke="#00E5FF" stroke-width="1" opacity="0.4">
+    <line x1="247" y1="306" x2="265" y2="311"/>
+    <line x1="247" y1="319" x2="265" y2="324"/>
+    <line x1="247" y1="332" x2="265" y2="337"/>
+    <line x1="247" y1="345" x2="265" y2="350"/>
+  </g>
+
+  <!-- === POMMEL === -->
+  <circle cx="256" cy="365" r="12" fill="#1565C0" stroke="#42A5F5" stroke-width="1.5"/>
+  <circle cx="256" cy="365" r="5" fill="url(#accent)" filter="url(#glow)"/>
+
+  <!-- === SUBTLE CIRCUIT NODES === -->
+  <!-- Small tech accents at hex vertices - like K8s has at its hex points -->
+  <g fill="url(#accent)" opacity="0.6">
+    <circle cx="256" cy="48" r="6"/>
+    <circle cx="422" cy="143" r="6"/>
+    <circle cx="422" cy="333" r="6"/>
+    <circle cx="256" cy="428" r="6"/>
+    <circle cx="90" cy="333" r="6"/>
+    <circle cx="90" cy="143" r="6"/>
+  </g>
+
+  <!-- Connection lines from hex vertices - like K8s spokes -->
+  <g stroke="url(#accent)" stroke-width="1.5" opacity="0.25">
+    <line x1="256" y1="48" x2="256" y2="72"/>
+    <line x1="422" y1="143" x2="398" y2="162"/>
+    <line x1="422" y1="333" x2="398" y2="312"/>
+    <line x1="256" y1="428" x2="256" y2="396"/>
+    <line x1="90" y1="333" x2="114" y2="312"/>
+    <line x1="90" y1="143" x2="114" y2="162"/>
+  </g>
 </svg>

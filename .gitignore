@@ -46,3 +46,6 @@ playwright/.cache/
 .cache/
 tmp/
 temp/
+
+# Internal design docs (not for public)
+chatbot-pentester-spec.md
