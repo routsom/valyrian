@@ -7,7 +7,10 @@ Welcome to the Valyrian Edge documentation!
 - [Getting Started](getting-started.md)
 - [Configuration Guide](configuration.md)
 - [Agent Reference](agents.md)
-- [API Reference](api.md)
+- [SDK Reference](sdk.md)
+- [Dashboard](dashboard.md)
+- [GitHub Action / CI-CD](github-action.md)
+- [Plugin System](plugins.md)
 
 ## What is Valyrian Edge?
 
@@ -22,6 +25,10 @@ Valyrian Edge is an autonomous AI penetration testing platform designed specific
 | **Automated Exploitation** | PoC generation for verified findings |
 | **Report Generation** | Markdown, HTML, JSON, SARIF |
 | **Browser Automation** | Playwright for web UI testing |
+| **Programmatic SDK** | `ValyrianEdge` class for embedding in your own code |
+| **Web Dashboard** | Real-time scan monitoring via SSE |
+| **GitHub Action** | SARIF upload to GitHub Security tab |
+| **Plugin System** | Community marketplace with installable templates |
 
 ## Getting Help
 

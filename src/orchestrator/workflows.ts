@@ -192,6 +192,90 @@ export async function pentestWorkflow(input: PentestWorkflowInput): Promise<Secu
             );
         }
 
+        // Insecure Output Analysis
+        if (input.scope.vulnerabilities.includes('LLM02_INSECURE_OUTPUT')) {
+            analysisPromises.push(
+                activities.runInsecureOutputAnalysis({
+                    target: input.target,
+                    llmConfig: input.llmConfig,
+                    sessionId: input.sessionId,
+                    reconOutput,
+                })
+            );
+        }
+
+        // RAG / Training Data Poisoning Analysis
+        if (input.scope.vulnerabilities.includes('LLM03_TRAINING_DATA_POISONING')) {
+            analysisPromises.push(
+                activities.runRAGPoisoningAnalysis({
+                    target: input.target,
+                    llmConfig: input.llmConfig,
+                    sessionId: input.sessionId,
+                    reconOutput,
+                })
+            );
+        }
+
+        // Model DoS Analysis
+        if (input.scope.vulnerabilities.includes('LLM04_MODEL_DOS')) {
+            analysisPromises.push(
+                activities.runDoSAnalysis({
+                    target: input.target,
+                    llmConfig: input.llmConfig,
+                    sessionId: input.sessionId,
+                    reconOutput,
+                })
+            );
+        }
+
+        // Supply Chain Analysis
+        if (input.scope.vulnerabilities.includes('LLM05_SUPPLY_CHAIN')) {
+            analysisPromises.push(
+                activities.runSupplyChainAnalysis({
+                    target: input.target,
+                    llmConfig: input.llmConfig,
+                    sessionId: input.sessionId,
+                    reconOutput,
+                })
+            );
+        }
+
+        // Excessive Agency Analysis
+        if (input.scope.vulnerabilities.includes('LLM08_EXCESSIVE_AGENCY')) {
+            analysisPromises.push(
+                activities.runExcessiveAgencyAnalysis({
+                    target: input.target,
+                    llmConfig: input.llmConfig,
+                    sessionId: input.sessionId,
+                    reconOutput,
+                })
+            );
+        }
+
+        // Overreliance Analysis
+        if (input.scope.vulnerabilities.includes('LLM09_OVERRELIANCE')) {
+            analysisPromises.push(
+                activities.runOverrelianceAnalysis({
+                    target: input.target,
+                    llmConfig: input.llmConfig,
+                    sessionId: input.sessionId,
+                    reconOutput,
+                })
+            );
+        }
+
+        // Model Theft Analysis
+        if (input.scope.vulnerabilities.includes('LLM10_MODEL_THEFT')) {
+            analysisPromises.push(
+                activities.runModelTheftAnalysis({
+                    target: input.target,
+                    llmConfig: input.llmConfig,
+                    sessionId: input.sessionId,
+                    reconOutput,
+                })
+            );
+        }
+
         // Wait for all analyses to complete
         analysisResults = await Promise.all(analysisPromises);
         status.progress = 80;

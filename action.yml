@@ -1,0 +1,67 @@
+name: 'Valyrian Edge LLM Security Scan'
+description: 'Autonomous penetration testing for LLM-powered applications — OWASP LLM Top 10 coverage'
+author: 'Valyrian Security'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  config:
+    description: 'Path to valyrian config YAML file'
+    required: false
+    default: ''
+  target_url:
+    description: 'Target chatbot base URL (overrides config)'
+    required: false
+    default: ''
+  target_name:
+    description: 'Human-readable target name'
+    required: false
+    default: 'Target'
+  vulnerabilities:
+    description: 'Comma-separated OWASP vulnerability types (e.g. LLM01_PROMPT_INJECTION,LLM06_SENSITIVE_INFO_DISCLOSURE)'
+    required: false
+    default: 'LLM01_PROMPT_INJECTION,LLM06_SENSITIVE_INFO_DISCLOSURE,LLM07_INSECURE_PLUGIN'
+  llm_provider:
+    description: 'LLM provider: anthropic | openai | ollama'
+    required: false
+    default: 'anthropic'
+  llm_model:
+    description: 'LLM model identifier'
+    required: false
+    default: 'claude-haiku-4-5-20251001'
+  anthropic_api_key:
+    description: 'Anthropic API key'
+    required: false
+    default: ''
+  openai_api_key:
+    description: 'OpenAI API key'
+    required: false
+    default: ''
+  output_dir:
+    description: 'Directory to write SARIF and report files'
+    required: false
+    default: 'valyrian-results'
+  fail_on_severity:
+    description: 'Fail the workflow if findings at this severity or above are found: critical | high | medium | low | never'
+    required: false
+    default: 'high'
+  timeout:
+    description: 'Scan timeout in seconds'
+    required: false
+    default: '300'
+
+outputs:
+  sarif_file:
+    description: 'Path to the generated SARIF 2.1.0 file'
+  finding_count:
+    description: 'Total number of findings'
+  critical_count:
+    description: 'Number of critical findings'
+  high_count:
+    description: 'Number of high findings'
+
+runs:
+  using: 'node20'
+  main: 'dist/action/index.js'

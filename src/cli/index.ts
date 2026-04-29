@@ -8,9 +8,27 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
 import { createPentestConfig, getAppConfigFromEnv } from '../config/index.js';
+import { createPentestClient } from '../orchestrator/client.js';
+import { createReportGenerator } from '../reporting/generator.js';
+import type { SecurityReport } from '../types/index.js';
 import { cliLogger } from '../utils/logger.js';
+import {
+    mapVulnerabilitiesToOWASP,
+    saveSessionMetadata,
+    loadSessionMetadata,
+    withTimeout,
+} from './helpers.js';
+
+export {
+    mapVulnerabilitiesToOWASP,
+    saveSessionMetadata,
+    loadSessionMetadata,
+    sessionMetadataPath,
+    withTimeout,
+} from './helpers.js';
+export type { SessionMetadata } from './helpers.js';
 
 // =============================================================================
 // ASCII BANNER
@@ -80,7 +98,6 @@ program
     .option('--skip-disclaimer', 'Skip legal disclaimer (for CI/CD)', false)
     .action(async (options) => {
         try {
-            // Show legal disclaimer
             if (!options.skipDisclaimer) {
                 console.log(LEGAL_NOTICE);
                 console.log(chalk.yellow('\nPress Ctrl+C to cancel, or wait 5 seconds to continue...\n'));
@@ -89,7 +106,6 @@ program
 
             const spinner = ora('Loading configuration...').start();
 
-            // Load configuration
             const config = createPentestConfig(options.config, {
                 outputDir: options.output,
                 verbose: options.verbose,
@@ -101,41 +117,88 @@ program
 
             spinner.succeed('Configuration loaded');
 
-            cliLogger.info({
-                sessionId: config.sessionId,
-                target: config.target.baseUrl,
-                scope: config.scope.vulnerabilities,
-            }, 'Starting pentest');
-
-            console.log(chalk.cyan('\n📋 Pentest Configuration:'));
-            console.log(chalk.gray(`   Session ID: ${config.sessionId}`));
-            console.log(chalk.gray(`   Target: ${config.target.baseUrl}`));
-            console.log(chalk.gray(`   LLM Provider: ${config.llm.provider}`));
-            console.log(chalk.gray(`   Vulnerabilities: ${config.scope.vulnerabilities.join(', ')}`));
-            console.log(chalk.gray(`   Output: ${config.outputDir}`));
-
             if (options.dryRun) {
+                console.log(chalk.cyan('\n📋 Pentest Configuration:'));
+                console.log(chalk.gray(`   Target: ${config.target.name} (${config.target.baseUrl})`));
+                console.log(chalk.gray(`   Vulnerabilities: ${config.scope.vulnerabilities.join(', ')}`));
                 console.log(chalk.green('\n✅ Dry run complete. Configuration is valid.'));
                 return;
             }
 
-            // Start the pentest workflow
-            spinner.start('Initializing Temporal workflow...');
+            spinner.start('Connecting to Temporal...');
+            const client = await createPentestClient();
 
-            // TODO: Connect to Temporal and start workflow
-            // For now, we'll simulate the workflow
-            spinner.text = 'Starting reconnaissance...';
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            const vulnTypes = mapVulnerabilitiesToOWASP(config.scope.vulnerabilities);
+
+            spinner.text = 'Starting pentest workflow...';
+            const sessionId = await client.startPentest({
+                target: config.target,
+                llmConfig: config.llm,
+                scope: {
+                    vulnerabilities: vulnTypes,
+                    enableExploitation: config.scope.enableExploitation,
+                    generateReport: true,
+                },
+            });
+
+            await client.disconnect();
+
+            saveSessionMetadata({
+                sessionId,
+                targetName: config.target.name,
+                targetUrl: config.target.baseUrl,
+                startedAt: new Date().toISOString(),
+                outputDir: config.outputDir,
+            });
 
             spinner.succeed('Pentest workflow started');
 
-            console.log(chalk.cyan(`\n🔍 Pentest session: ${config.sessionId}`));
-            console.log(chalk.gray('   Use `valyrian logs --session <id>` to view progress'));
-            console.log(chalk.gray('   Use `valyrian report --session <id>` to generate report'));
+            cliLogger.info({ sessionId, target: config.target.baseUrl }, 'Pentest started');
+
+            console.log(chalk.cyan(`\n🔍 Session ID: ${chalk.bold(sessionId)}`));
+            console.log(chalk.gray(`   Target:          ${config.target.baseUrl}`));
+            console.log(chalk.gray(`   Vulnerabilities: ${vulnTypes.join(', ')}`));
+            console.log(chalk.gray(`\n   valyrian logs   -s ${sessionId}   — stream progress`));
+            console.log(chalk.gray(`   valyrian report -s ${sessionId}   — generate report`));
+            console.log(chalk.gray(`   valyrian resume -s ${sessionId}   — resume if paused`));
 
         } catch (error) {
             console.error(chalk.red(`\n❌ Error: ${error}`));
             cliLogger.error({ error }, 'CLI start command failed');
+            process.exit(1);
+        }
+    });
+
+// =============================================================================
+// RESUME COMMAND
+// =============================================================================
+
+program
+    .command('resume')
+    .description('Resume a paused penetration test')
+    .requiredOption('-s, --session <id>', 'Session ID to resume')
+    .option('-o, --output <dir>', 'Output directory (to locate session metadata)', './audit-logs')
+    .action(async (options) => {
+        try {
+            const spinner = ora(`Resuming session ${options.session}...`).start();
+
+            const client = await createPentestClient();
+            await client.resumePentest(options.session);
+            await client.disconnect();
+
+            spinner.succeed('Pentest resumed');
+
+            const meta = loadSessionMetadata(options.output, options.session);
+            console.log(chalk.cyan(`\n▶️  Session ${options.session} resumed`));
+            if (meta) {
+                console.log(chalk.gray(`   Target:  ${meta.targetUrl}`));
+                console.log(chalk.gray(`   Started: ${meta.startedAt}`));
+            }
+            console.log(chalk.gray(`\n   valyrian logs -s ${options.session}   — monitor progress`));
+
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Error: ${error}`));
+            cliLogger.error({ error, sessionId: options.session }, 'CLI resume command failed');
             process.exit(1);
         }
     });
@@ -146,23 +209,89 @@ program
 
 program
     .command('logs')
-    .description('View logs for a pentest session')
+    .description('View status and findings for a pentest session')
     .requiredOption('-s, --session <id>', 'Session ID')
-    .option('-f, --follow', 'Follow log output (like tail -f)', false)
-    .option('-n, --lines <count>', 'Number of lines to show', '50')
+    .option('-o, --output <dir>', 'Output directory (to locate session metadata)', './audit-logs')
+    .option('-f, --follow', 'Poll status every 10 seconds until completed', false)
     .action(async (options) => {
         try {
-            console.log(chalk.cyan(`\n📜 Logs for session: ${options.session}\n`));
+            const meta = loadSessionMetadata(options.output, options.session);
 
-            // TODO: Implement log retrieval from Temporal/audit-logs
-            console.log(chalk.gray('Log retrieval not yet implemented'));
-            console.log(chalk.gray(`Would show last ${options.lines} lines`));
-            if (options.follow) {
-                console.log(chalk.gray('Follow mode enabled'));
+            console.log(chalk.cyan(`\n📜 Session: ${options.session}`));
+            if (meta) {
+                console.log(chalk.gray(`   Target:  ${meta.targetUrl}`));
+                console.log(chalk.gray(`   Started: ${meta.startedAt}`));
+            }
+
+            const printStatus = async (): Promise<boolean> => {
+                const client = await createPentestClient();
+                try {
+                    const [status, findings] = await Promise.all([
+                        client.getStatus(options.session),
+                        client.getFindings(options.session),
+                    ]);
+                    await client.disconnect();
+
+                    console.log(chalk.cyan(`\n   Phase:    ${chalk.bold(status.phase)}`));
+                    console.log(chalk.gray(`   Progress: ${status.progress}%`));
+                    if (status.currentActivity) {
+                        console.log(chalk.gray(`   Current:  ${status.currentActivity}`));
+                    }
+                    if (status.error) {
+                        console.log(chalk.red(`   Error:    ${status.error}`));
+                    }
+
+                    if (findings.length > 0) {
+                        console.log(chalk.cyan('\n   Findings so far:'));
+                        for (const f of findings) {
+                            const color =
+                                f.severity === 'critical' ? chalk.red
+                                    : f.severity === 'high' ? chalk.yellow
+                                        : chalk.gray;
+                            console.log(color(`     [${f.severity.toUpperCase()}] ${f.type} — ${f.count} finding(s)`));
+                        }
+                    }
+
+                    const terminal = status.phase === 'completed'
+                        || status.phase === 'failed'
+                        || status.phase === 'cancelled';
+                    return terminal;
+                } catch (err) {
+                    await client.disconnect();
+                    throw err;
+                }
+            };
+
+            const done = await printStatus();
+
+            if (options.follow && !done) {
+                console.log(chalk.gray('\n   Following (Ctrl+C to stop)...'));
+                const interval = setInterval(async () => {
+                    try {
+                        const finished = await printStatus();
+                        if (finished) {
+                            clearInterval(interval);
+                            console.log(chalk.green('\n✅ Session complete.'));
+                            process.exit(0);
+                        }
+                    } catch (err) {
+                        clearInterval(interval);
+                        console.error(chalk.red(`\n❌ Error polling status: ${err}`));
+                        process.exit(1);
+                    }
+                }, 10_000);
+
+                // Clean shutdown on Ctrl+C — clear the interval so Node can exit
+                process.once('SIGINT', () => {
+                    clearInterval(interval);
+                    console.log(chalk.gray('\n\n   Stopped following.'));
+                    process.exit(0);
+                });
             }
 
         } catch (error) {
             console.error(chalk.red(`\n❌ Error: ${error}`));
+            cliLogger.error({ error, sessionId: options.session }, 'CLI logs command failed');
             process.exit(1);
         }
     });
@@ -175,24 +304,60 @@ program
     .command('report')
     .description('Generate a security assessment report')
     .requiredOption('-s, --session <id>', 'Session ID')
-    .option('-f, --format <format>', 'Output format: markdown, html, pdf, json', 'markdown')
-    .option('-o, --output <path>', 'Output file path')
+    .option('-f, --format <format>', 'Output format: markdown, html, json, sarif', 'markdown')
+    .option('-o, --output-dir <dir>', 'Output directory', './audit-logs')
     .option('--no-poc', 'Exclude PoC scripts from report')
-    .option('--redact', 'Redact sensitive data', true)
+    .option('--redact', 'Redact sensitive data', false)
+    .option('--timeout <seconds>', 'Seconds to wait for workflow completion', '600')
     .action(async (options) => {
+        const spinner = ora('Connecting to Temporal...').start();
         try {
-            const spinner = ora('Generating report...').start();
+            const client = await createPentestClient();
+            const timeoutMs = Math.max(1, parseInt(options.timeout, 10)) * 1000;
 
-            // TODO: Implement report generation
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            spinner.text = `Fetching workflow result (timeout: ${options.timeout}s)...`;
+            const result = await withTimeout(
+                client.waitForCompletion(options.session),
+                timeoutMs,
+                `Timed out after ${options.timeout}s — workflow may still be running. ` +
+                'Use a larger --timeout or check status with `valyrian logs`.',
+            ) as SecurityReport;
+            await client.disconnect();
 
+            if (!result) {
+                spinner.fail('No result available — workflow may still be running');
+                process.exit(1);
+            }
+
+            const ext = options.format === 'markdown' ? 'md' : options.format;
+            const outputPath = join(options.outputDir, options.session, `report.${ext}`);
+
+            spinner.text = 'Generating report...';
+            const generator = createReportGenerator(result, {
+                format: options.format as 'markdown' | 'html' | 'json' | 'sarif',
+                outputPath,
+                includePOC: options.poc !== false,
+                redactSensitive: options.redact,
+            });
+
+            await generator.generate();
             spinner.succeed('Report generated');
 
-            const outputPath = options.output ?? `./audit-logs/${options.session}/report.${options.format === 'markdown' ? 'md' : options.format}`;
-            console.log(chalk.green(`\n📄 Report saved to: ${outputPath}`));
+            console.log(chalk.green(`\n📄 Report saved to: ${chalk.bold(outputPath)}`));
+            console.log(chalk.gray(`   Format:  ${options.format}`));
+            console.log(chalk.gray(`   Session: ${options.session}`));
+
+            const summary = result.executiveSummary;
+            console.log(chalk.cyan('\n   Summary:'));
+            console.log(chalk.red(`     Critical: ${summary.criticalCount}`));
+            console.log(chalk.yellow(`     High:     ${summary.highCount}`));
+            console.log(chalk.gray(`     Medium:   ${summary.mediumCount}`));
+            console.log(chalk.gray(`     Low:      ${summary.lowCount}`));
 
         } catch (error) {
+            spinner.fail('Report generation failed');
             console.error(chalk.red(`\n❌ Error: ${error}`));
+            cliLogger.error({ error, sessionId: options.session }, 'CLI report command failed');
             process.exit(1);
         }
     });
@@ -247,6 +412,133 @@ program
                     console.log(chalk.gray(`   Output Dir: ${config.outputDir}`));
                 } catch (error) {
                     console.error(chalk.red(`\n❌ Error: ${error}`));
+                    process.exit(1);
+                }
+            })
+    );
+
+// =============================================================================
+// DASHBOARD COMMAND
+// =============================================================================
+
+program
+    .command('dashboard')
+    .description('Start the live web dashboard')
+    .option('-p, --port <number>', 'Port to listen on', '7400')
+    .option('--host <host>', 'Host to bind to', '127.0.0.1')
+    .option('-o, --output <dir>', 'Output directory containing session metadata', './audit-logs')
+    .action(async (options) => {
+        try {
+            const { DashboardServer, TemporalDataSource } = await import('../dashboard/index.js');
+            const port = parseInt(options.port, 10);
+            const source = new TemporalDataSource(options.output);
+            const server = new DashboardServer(source, {
+                port,
+                host: options.host,
+                outputDir: options.output,
+            });
+
+            const { url, close } = await server.start();
+
+            console.log(chalk.cyan(`\n📊 Dashboard running at: ${chalk.bold(url)}`));
+            console.log(chalk.gray('   Press Ctrl+C to stop.\n'));
+
+            process.once('SIGINT', async () => {
+                await close();
+                process.exit(0);
+            });
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Dashboard error: ${error}`));
+            cliLogger.error({ error }, 'CLI dashboard command failed');
+            process.exit(1);
+        }
+    });
+
+// =============================================================================
+// PLUGIN COMMAND
+// =============================================================================
+
+program
+    .command('plugin')
+    .description('Manage community plugins')
+    .addCommand(
+        new Command('list')
+            .description('List installed plugins')
+            .action(async () => {
+                const { PluginLoader } = await import('../plugins/index.js');
+                const loader = new PluginLoader();
+                const plugins = loader.loadAll();
+                if (!plugins.length) {
+                    console.log(chalk.gray('\n   No plugins installed. Run: valyrian plugin install <id> <repo-url>'));
+                    return;
+                }
+                console.log(chalk.cyan(`\n   ${plugins.length} plugin(s) installed:\n`));
+                for (const p of plugins) {
+                    console.log(chalk.white(`   ${chalk.bold(p.manifest.id)}  v${p.manifest.version}`));
+                    console.log(chalk.gray(`     ${p.manifest.description}`));
+                    if (p.templateFiles.length) {
+                        console.log(chalk.gray(`     Templates: ${p.templateFiles.length}`));
+                    }
+                }
+            })
+    )
+    .addCommand(
+        new Command('search')
+            .description('Search the community registry')
+            .argument('<query>', 'Search term')
+            .action(async (query: string) => {
+                const spinner = ora(`Searching registry for "${query}"...`).start();
+                try {
+                    const { RegistryClient } = await import('../plugins/index.js');
+                    const client = new RegistryClient();
+                    const results = await client.search(query);
+                    spinner.stop();
+                    if (!results.length) {
+                        console.log(chalk.gray(`\n   No plugins found for "${query}"`));
+                        return;
+                    }
+                    console.log(chalk.cyan(`\n   ${results.length} result(s):\n`));
+                    for (const r of results) {
+                        console.log(chalk.white(`   ${chalk.bold(r.id)}  v${r.version}  by ${r.author ?? 'unknown'}`));
+                        console.log(chalk.gray(`     ${r.description}`));
+                        console.log(chalk.gray(`     ${r.repository}`));
+                    }
+                } catch (error) {
+                    spinner.fail(`Registry search failed: ${error}`);
+                }
+            })
+    )
+    .addCommand(
+        new Command('install')
+            .description('Install a plugin from a git repository')
+            .argument('<id>', 'Plugin id (used as local directory name)')
+            .argument('<repo>', 'Git repository URL')
+            .action(async (id: string, repo: string) => {
+                const spinner = ora(`Installing plugin ${id}...`).start();
+                try {
+                    const { PluginInstaller } = await import('../plugins/index.js');
+                    const installer = new PluginInstaller();
+                    await installer.install(id, repo);
+                    spinner.succeed(`Plugin ${chalk.bold(id)} installed`);
+                } catch (error) {
+                    spinner.fail(`Install failed: ${error}`);
+                    process.exit(1);
+                }
+            })
+    )
+    .addCommand(
+        new Command('remove')
+            .description('Remove an installed plugin')
+            .argument('<id>', 'Plugin id to remove')
+            .action(async (id: string) => {
+                const spinner = ora(`Removing plugin ${id}...`).start();
+                try {
+                    const { PluginInstaller } = await import('../plugins/index.js');
+                    const installer = new PluginInstaller();
+                    installer.remove(id);
+                    spinner.succeed(`Plugin ${chalk.bold(id)} removed`);
+                } catch (error) {
+                    spinner.fail(`Remove failed: ${error}`);
                     process.exit(1);
                 }
             })

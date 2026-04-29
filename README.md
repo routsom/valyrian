@@ -8,14 +8,15 @@
 
 *Autonomous penetration testing for AI-powered applications — 77 attack templates, 248 payloads, 10 specialized agents*
 
+[![npm](https://img.shields.io/npm/v/valyrian-edge.svg)](https://www.npmjs.com/package/valyrian-edge)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue.svg)](https://www.typescriptlang.org)
-[![Tests](https://img.shields.io/badge/Tests-81%20Passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-196%20Passing-brightgreen.svg)](#testing)
 [![OWASP LLM Top 10](https://img.shields.io/badge/OWASP-LLM%20Top%2010-orange.svg)](https://owasp.org/www-project-top-10-for-large-language-model-applications/)
 [![Templates](https://img.shields.io/badge/Templates-77%20Attacks-red.svg)](#attack-templates)
 
-[Quick Start](#-quick-start) · [Templates](#-attack-templates) · [SDK](#-sdk-usage) · [Documentation](docs/) · [Contributing](CONTRIBUTING.md)
+[Quick Start](#-quick-start) · [Templates](#-attack-templates) · [SDK](#-sdk-usage) · [Dashboard](#-dashboard) · [Documentation](docs/) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -60,25 +61,31 @@ Valyrian Edge is the **open-source Burp Suite for LLMs** — purpose-built to se
 ### Prerequisites
 
 - **Node.js 20+**
-- **Docker & Docker Compose** (for Temporal orchestration)
 - **LLM API Key** — Anthropic, OpenAI, or **free** with Ollama
+- **Docker** (optional — only needed for Temporal orchestration mode)
 
-### Install & Run
+### Install from npm
 
 ```bash
-# Clone
+npm install -g valyrian-edge
+
+# Configure your LLM provider
+export ANTHROPIC_API_KEY=sk-ant-your-key
+
+# Run your first scan (no Docker required)
+valyrian start -c configs/example-config.yaml
+```
+
+### Or clone for development
+
+```bash
 git clone https://github.com/valyrian-security/valyrian-edge.git
-cd valyrian-edge && npm install
+cd valyrian-edge && npm install && npm run build
 
-# Configure
-cp .env.example .env
-npm run build
-
-# Start Temporal
+# Optional: start Temporal for durable workflow orchestration
 docker compose up -d
 
-# Run your first scan
-npx valyrian start -c configs/example-config.yaml
+valyrian start -c configs/example-config.yaml
 ```
 
 ### LLM Providers
@@ -229,7 +236,74 @@ valyrian logs -s <session-id>           # Stream scan logs
 valyrian report -s <session-id> -f html # Generate report
 valyrian config validate config.yaml    # Validate config
 valyrian config show                    # Show environment
+
+valyrian dashboard --port 3000          # Launch real-time web dashboard
+
+valyrian plugin list                    # List installed plugins
+valyrian plugin search <query>          # Search community registry
+valyrian plugin install <id> <repo>     # Install a plugin
+valyrian plugin remove <id>             # Remove a plugin
 ```
+
+---
+
+## 💻 SDK Usage
+
+Embed scans directly in your code — no CLI required:
+
+```typescript
+import { ValyrianEdge } from 'valyrian-edge';
+
+const valyrian = new ValyrianEdge({ mode: 'direct' }); // no Temporal needed
+
+const report = await valyrian.scanAndWait({
+    target: {
+        id: 'my-chatbot',
+        name: 'Customer Support Bot',
+        baseUrl: 'https://chatbot.example.com',
+        endpoints: { chat: '/api/chat' },
+    },
+    llm: {
+        provider: 'anthropic',
+        model: 'claude-haiku-4-5-20251001',
+        apiKey: process.env.ANTHROPIC_API_KEY,
+    },
+    vulnerabilities: ['LLM01_PROMPT_INJECTION', 'LLM06_SENSITIVE_INFO_DISCLOSURE'],
+});
+
+console.log(`Risk: ${report.executiveSummary.overallRisk}`);
+console.log(`Findings: ${report.findings.length}`);
+```
+
+For background scans, use `scan()` to get a `ScanSession` handle with `status()`, `findings()`, and `cancel()`. See the [SDK Reference](docs/sdk.md) for full details.
+
+---
+
+## 📊 Dashboard
+
+```bash
+valyrian dashboard --port 3000 --output ./scan-output
+```
+
+Opens a real-time web dashboard at `http://localhost:3000` showing all scan sessions, progress, and findings. Also exposes a raw SSE stream at `/events` for programmatic consumption. See [Dashboard docs](docs/dashboard.md).
+
+---
+
+## 🔧 GitHub Action
+
+```yaml
+- uses: valyrian-security/valyrian-edge@v1
+  with:
+    target_url: https://chatbot.example.com
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    fail_on_severity: high
+
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: valyrian-results.sarif
+```
+
+Uploads findings to GitHub's Security tab as SARIF alerts. See [GitHub Action docs](docs/github-action.md).
 
 ---
 
@@ -277,19 +351,17 @@ valyrian config show                    # Show environment
 ```
 valyrian-edge/
 ├── src/
+│   ├── index.ts               # Package entry point
 │   ├── agents/                # 10 OWASP LLM Top 10 agents
-│   │   ├── base_agent.ts          # Abstract base with LLM integration
-│   │   ├── prompt_injection_agent.ts
-│   │   ├── data_exfiltration_agent.ts
-│   │   └── ...
 │   ├── templates/             # Template + Mutation engines
-│   │   ├── template.types.ts      # YAML schema types
-│   │   ├── template_engine.ts     # Loader, matcher, executor
-│   │   └── mutation_engine.ts     # 8 mutation strategies
+│   ├── sdk/                   # Programmatic API (ValyrianEdge, DirectRunner, TemporalRunner)
+│   ├── dashboard/             # SSE web dashboard server
+│   ├── plugins/               # Plugin loader, registry, installer
+│   ├── action/                # GitHub Action entry point
 │   ├── cli/                   # Command-line interface
 │   ├── config/                # Configuration loader
 │   ├── tools/                 # HTTP client, browser automation
-│   ├── report/                # Report generators (MD, HTML, SARIF)
+│   ├── reporting/             # Report generators (MD, HTML, SARIF)
 │   ├── types/                 # TypeScript definitions
 │   └── utils/                 # Logger, sanitizer
 ├── templates/                 # 77 YAML attack templates
@@ -302,10 +374,12 @@ valyrian-edge/
 │   ├── overreliance/              # 5 templates
 │   ├── model-theft/               # 5 templates
 │   └── excessive-agency/          # 5 templates
-├── tests/                     # 81 tests across 8 suites
+├── tests/                     # 196 tests across 14 suites
 ├── configs/                   # Example configurations
 ├── prompts/                   # Agent system prompts
 ├── docs/                      # Documentation
+├── action.yml                 # GitHub Action metadata
+├── registry.json              # Community plugin registry
 └── docker-compose.yml         # Temporal orchestration
 ```
 
@@ -314,12 +388,12 @@ valyrian-edge/
 ## 🧪 Testing
 
 ```bash
-npm test                                      # Run all 81 tests
+npm test                                      # Run all 196 tests
 npm run test:coverage                         # With coverage
 npm test -- tests/templates/template_engine.test.ts  # Template engine tests only
 ```
 
-**Status:** 81 tests passing across 8 test suites — agents, templates, mutation engine, HTTP client.
+**Status:** 196 tests passing across 14 test suites — agents, templates, mutation engine, HTTP client, Temporal activities, CLI helpers, SDK, dashboard, plugin loader.
 
 ---
 
@@ -328,11 +402,11 @@ npm test -- tests/templates/template_engine.test.ts  # Template engine tests onl
 | Phase | Milestone | Status |
 |-------|-----------|--------|
 | **2A** | Payload Engine + 77 Templates + Mutation Engine | ✅ Complete |
-| **2A** | Agent Integration + Conversation Planner | 🔄 In Progress |
-| **2B** | SDK + Programmatic API (`ValyrianEdge` class) | 📋 Planned |
-| **2C** | Web Dashboard (React + WebSocket) | 📋 Planned |
-| **2D** | CI/CD Integration (GitHub Action + SARIF) | 📋 Planned |
-| **2E** | Community Marketplace + Plugin System | 📋 Planned |
+| **2A** | Agent Integration + Conversation Planner | ✅ Complete |
+| **2B** | SDK + Programmatic API (`ValyrianEdge` class) | ✅ Complete |
+| **2C** | Web Dashboard (SSE, zero extra deps) | ✅ Complete |
+| **2D** | CI/CD Integration (GitHub Action + SARIF) | ✅ Complete |
+| **2E** | Community Marketplace + Plugin System | ✅ Complete |
 
 ---
 

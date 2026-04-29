@@ -5,23 +5,23 @@ This guide will help you set up Valyrian Edge and run your first LLM security sc
 ## Prerequisites
 
 - **Node.js 20+** - [Download](https://nodejs.org)
-- **Docker** - [Download](https://docker.com) (for Temporal)
 - **LLM Access** - API key or Ollama for local models
+- **Docker** (optional) - only needed for Temporal orchestration mode
 
 ## Installation
 
+### From npm (recommended)
+
 ```bash
-# Clone the repository
+npm install -g valyrian-edge
+```
+
+### From source (contributors)
+
+```bash
 git clone https://github.com/valyrian-security/valyrian-edge.git
 cd valyrian-edge
-
-# Install dependencies
 npm install
-
-# Copy environment template
-cp .env.example .env
-
-# Build
 npm run build
 ```
 
@@ -97,8 +97,34 @@ npx valyrian logs -s <session-id>
 npx valyrian report -s <session-id> -f markdown
 ```
 
+## Running Without Temporal (Direct Mode)
+
+If you don't want to run Docker/Temporal, use the SDK's `DirectRunner` which executes everything in-process:
+
+```typescript
+import { ValyrianEdge } from 'valyrian-edge';
+
+const valyrian = new ValyrianEdge({ mode: 'direct' });
+const report = await valyrian.scanAndWait({
+    target: { id: 'bot', name: 'My Bot', baseUrl: 'https://chatbot.example.com', endpoints: { chat: '/api/chat' } },
+    llm: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', apiKey: process.env.ANTHROPIC_API_KEY },
+    vulnerabilities: ['LLM01_PROMPT_INJECTION'],
+});
+```
+
+## Monitoring Scans with the Dashboard
+
+```bash
+npx valyrian dashboard --port 3000 --output ./scan-output
+```
+
+Open `http://localhost:3000` to watch running scans in real time.
+
 ## Next Steps
 
 - [Configuration Guide](configuration.md) - All config options
 - [Agent Reference](agents.md) - What each agent tests
-- [Examples](examples/) - Real-world configurations
+- [SDK Reference](sdk.md) - Programmatic API
+- [Dashboard](dashboard.md) - Real-time monitoring
+- [GitHub Action / CI-CD](github-action.md) - SARIF integration
+- [Plugin System](plugins.md) - Community templates
